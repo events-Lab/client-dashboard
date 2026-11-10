@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "@events-lab/shared-components/theme.css";
 @source "../../../shared-compoenents/src";
+@source "../../vendor/shared-compoenents/src";
 
 :root {
   --background: #f6f2fb;
