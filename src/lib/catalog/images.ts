@@ -1,0 +1,33 @@
+/** Deterministic placeholder photos for marketplace cards. */
+export const images = {
+  events:
+    "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=900&q=80",
+  eventsAlt:
+    "https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&w=900&q=80",
+  eventsWomen:
+    "https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=900&q=80",
+  racket:
+    "https://picsum.photos/seed/padel-racket/800/1000",
+  racketAlt:
+    "https://picsum.photos/seed/padel-control/800/1000",
+  racketDetail:
+    "https://picsum.photos/seed/padel-racket-face/800/1000",
+  balls:
+    "https://picsum.photos/seed/padel-balls/800/1000",
+  ballsDetail:
+    "https://picsum.photos/seed/padel-balls-pack/800/1000",
+  grips:
+    "https://picsum.photos/seed/padel-grips/800/1000",
+  gripsDetail:
+    "https://picsum.photos/seed/padel-overgrip/800/1000",
+  bags:
+    "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=80",
+  bagsDetail:
+    "https://picsum.photos/seed/padel-bag/800/1000",
+  apparel:
+    "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=80",
+  apparelDetail:
+    "https://picsum.photos/seed/padel-tee/800/1000",
+  sports:
+    "https://images.unsplash.com/photo-1461896836934-ffe607ba6851?auto=format&fit=crop&w=800&q=80",
+};
