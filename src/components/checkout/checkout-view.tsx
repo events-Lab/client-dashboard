@@ -756,8 +756,11 @@ function validateAddress(address: Address, prefix: string) {
 }
 
 function validatePhone(phone: string) {
-  if (phone.replace(/\D/g, "").length < 7) return { "ship-phone": "Enter a phone number" };
-  return {};
+  const errors: Record<string, string> = {};
+  if (phone.replace(/\D/g, "").length < 7) {
+    errors["ship-phone"] = "Enter a phone number";
+  }
+  return errors;
 }
 
 function validatePayment(payment: {
