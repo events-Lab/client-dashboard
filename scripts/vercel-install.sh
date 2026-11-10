@@ -1,30 +1,16 @@
 #!/usr/bin/env bash
-# Vercel clones this repo by itself. The shared UI package lives in a sibling
-# repository, so recreate the local workspace layout before installing.
+# Vercel clones this repo alone. Pull the public shared UI package into the
+# project so Next can compile it without tracing files outside the deployment.
 set -euo pipefail
 
 app_dir="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$app_dir"
 
-if [ -z "${VERCEL:-}" ]; then
-  cd "$app_dir"
-  npm install
-  exit 0
+if [ -n "${VERCEL:-}" ]; then
+  rm -rf vendor/shared-compoenents
+  mkdir -p vendor
+  git clone --depth 1 https://github.com/events-Lab/shared-compoenents.git vendor/shared-compoenents
+  npm pkg set 'dependencies.@events-lab/shared-components=file:vendor/shared-compoenents'
 fi
 
-parent="$(dirname "$app_dir")"
-base="$(basename "$app_dir")"
-shared="$parent/shared-compoenents"
-
-rm -rf "$shared"
-git clone --depth 1 https://github.com/events-Lab/shared-compoenents.git "$shared"
-
-cat > "$parent/package.json" << EOF
-{
-  "name": "events-lab",
-  "private": true,
-  "workspaces": ["shared-compoenents", "$base"]
-}
-EOF
-
-cd "$parent"
 npm install --include=dev
