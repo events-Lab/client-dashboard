@@ -84,7 +84,7 @@ function MarketplaceContent() {
 
   return (
     <div className="page-enter flex flex-col gap-8">
-      <section className="rounded-[24px] border border-primary-100 bg-white px-5 py-6 shadow-[0_12px_30px_rgba(91,33,182,0.06)]">
+      <section className="rounded-[24px] border border-primary-100 bg-primary-50 px-5 py-6 shadow-[0_12px_30px_rgba(16,42,67,0.06)]">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="m-0 text-xs font-semibold tracking-[0.08em] text-primary uppercase">

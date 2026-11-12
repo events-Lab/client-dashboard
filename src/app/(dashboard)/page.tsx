@@ -53,7 +53,7 @@ export default function HomePage() {
 
   return (
     <div className="page-enter flex flex-col gap-8">
-      <section className="hero-glow relative overflow-hidden rounded-[28px] px-6 py-7 text-white shadow-[0_20px_50px_rgba(91,33,182,0.28)]">
+      <section className="hero-glow relative overflow-hidden rounded-[28px] px-6 py-7 text-white shadow-[0_20px_50px_rgba(16,42,67,0.28)]">
         <div className="float-orb pointer-events-none absolute -top-10 -right-8 size-40 rounded-full bg-accent/50 blur-2xl" />
         <div className="float-orb pointer-events-none absolute -bottom-14 left-1/4 size-36 rounded-full bg-white/20 blur-2xl [animation-delay:-1.6s]" />
         <div className="relative flex flex-wrap items-end justify-between gap-4">

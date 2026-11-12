@@ -4,8 +4,8 @@
 @source "../../vendor/shared-compoenents/src";
 
 :root {
-  --background: #f6f2fb;
-  --foreground: #1d1428;
+  --background: #f8fafc;
+  --foreground: #1e293b;
 }
 
 @theme inline {
