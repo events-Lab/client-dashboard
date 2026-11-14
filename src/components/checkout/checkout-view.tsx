@@ -7,8 +7,14 @@ import {
   type CartLine,
 } from "@events-lab/shared-components";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent, type InputHTMLAttributes, type ReactNode } from "react";
-import { addStoredOrder, clearCart, getCart } from "@/lib/commerce";
+import {
+  AuthRequiredError,
+  ensureCustomerAuth,
+  useCreateOrderMutation,
+} from "@/lib/api";
+import { clearCart, getCart } from "@/lib/commerce";
 
 const PROVINCES = [
   "Alberta",
@@ -84,6 +90,7 @@ const primaryButton =
   "flex h-12 w-[240px] cursor-pointer items-center justify-center rounded-none bg-[#1c1c1c] text-[16px] font-normal text-white no-underline transition hover:bg-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1c1c1c]";
 
 export function CheckoutView() {
+  const router = useRouter();
   const [lines, setLines] = useState<CartLine[]>([]);
   const [ready, setReady] = useState(false);
   const [promo, setPromo] = useState("");
@@ -99,6 +106,8 @@ export function CheckoutView() {
   const [cardName, setCardName] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [placing, setPlacing] = useState(false);
+  const [createOrder] = useCreateOrderMutation();
 
   useEffect(() => {
     setLines(getCart());
@@ -148,29 +157,48 @@ export function CheckoutView() {
     goToStep(2);
   }
 
-  function placeOrder() {
-    if (lines.length === 0 || receipt) return;
-    const quote = priceQuote(lines, promo, address.province);
-    const id = String(1000 + Math.floor(Math.random() * 9000));
-    const label =
-      lines.length === 1 ? lines[0].label : `${lines.length} items (tickets and gear)`;
-
-    addStoredOrder({
-      id,
-      label,
-      amount: money(quote.total),
-      status: "Paid",
-    });
-    setReceipt({ id, lines, promo, province: address.province });
-    toast({ title: "Order placed", description: `Order #${id}` });
-    clearCart();
-    window.localStorage.removeItem(CART_PROMO_STORAGE_KEY);
-    setLines([]);
-    setCardNumber("");
-    setExpiry("");
-    setCvv("");
-    setCardName("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  async function placeOrder() {
+    if (lines.length === 0 || receipt || placing) return;
+    setPlacing(true);
+    try {
+      ensureCustomerAuth();
+      const order = await createOrder({
+        lines: lines.map((line) => ({
+          kind: line.kind ?? "product",
+          sourceId:
+            line.sourceId ??
+            line.id.replace(/^(product|ticket)-/, ""),
+          quantity: line.quantity,
+          unitPriceLabel: line.priceLabel,
+          label: line.label,
+        })),
+      }).unwrap();
+      setReceipt({
+        id: order.id,
+        lines,
+        promo,
+        province: address.province,
+      });
+      toast({ title: "Order placed", description: `Order #${order.id}` });
+      clearCart();
+      window.localStorage.removeItem(CART_PROMO_STORAGE_KEY);
+      setLines([]);
+      setCardNumber("");
+      setExpiry("");
+      setCvv("");
+      setCardName("");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      if (err instanceof AuthRequiredError) {
+        toast({ title: "Sign in required", description: err.message });
+        router.push("/login");
+        return;
+      }
+      const message = orderErrorMessage(err);
+      toast({ title: "Order failed", description: message });
+    } finally {
+      setPlacing(false);
+    }
   }
 
   return (
@@ -371,7 +399,12 @@ export function CheckoutView() {
                   <AddressText address={billing} />
                 )}
               </ReviewBlock>
-              <StepActions label="Place Order" onBack={() => goToStep(1)} onClick={placeOrder} />
+              <StepActions
+                label={placing ? "Placing…" : "Place Order"}
+                onBack={() => goToStep(1)}
+                onClick={placeOrder}
+                disabled={placing}
+              />
             </div>
           )}
         </div>
@@ -636,14 +669,21 @@ function StepActions({
   label,
   onBack,
   onClick,
+  disabled,
 }: {
   label: string;
   onBack: () => void;
-  onClick?: () => void;
+  onClick?: () => void | Promise<void>;
+  disabled?: boolean;
 }) {
   return (
     <div className="mt-10 flex flex-col items-center gap-4">
-      <button type={onClick ? "button" : "submit"} onClick={onClick} className={primaryButton}>
+      <button
+        type={onClick ? "button" : "submit"}
+        onClick={onClick}
+        disabled={disabled}
+        className={`${primaryButton} disabled:cursor-not-allowed disabled:opacity-60`}
+      >
         {label}
       </button>
       <button type="button" onClick={onBack} className={textLink}>
@@ -651,6 +691,19 @@ function StepActions({
       </button>
     </div>
   );
+}
+
+function orderErrorMessage(err: unknown): string {
+  if (err && typeof err === "object" && "data" in err) {
+    const data = (err as { data?: unknown }).data;
+    if (typeof data === "string" && data.trim()) return data;
+    if (data && typeof data === "object" && "message" in data) {
+      const message = (data as { message?: unknown }).message;
+      if (typeof message === "string" && message.trim()) return message;
+    }
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return "Could not place order";
 }
 
 function ReviewBlock({

@@ -15,12 +15,12 @@ import {
 } from "@events-lab/shared-components";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useGetProductQuery } from "@/lib/api";
 import { addCartLine, getCart, productToCartLine } from "@/lib/commerce";
-import { getClientProduct } from "@/lib/catalog";
 
 export function MarketplaceProductDetailView({ id }: { id: string }) {
   const router = useRouter();
-  const product = getClientProduct(id);
+  const { data: product, isLoading, isError } = useGetProductQuery(id);
   const stock = product
     ? getProductAvailability(product)
     : { available: 0, soldOut: true, label: "Out of stock" };
@@ -41,13 +41,21 @@ export function MarketplaceProductDetailView({ id }: { id: string }) {
     });
   }, [remaining]);
 
-  if (!product) {
+  if (isLoading) {
+    return <p className="m-0 text-sm text-secondary-500">Loading…</p>;
+  }
+
+  if (isError || !product) {
     return (
       <div className="page-enter flex flex-col gap-6">
         <PageHeader
           eyebrow="Marketplace"
           title="Product not found"
-          description={`No product matches id “${id}”.`}
+          description={
+            isError
+              ? "Could not load this product. Please try again."
+              : `No product matches id “${id}”.`
+          }
           actions={
             <Button
               type="button"

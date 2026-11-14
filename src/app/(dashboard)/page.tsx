@@ -11,28 +11,60 @@ import {
   type ProductItem,
 } from "@events-lab/shared-components";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AuthRequiredError,
+  ensureCustomerAuth,
+  getStoredToken,
+  useGetEventsQuery,
+  useGetOrdersQuery,
+  useGetProductsQuery,
+  useJoinEventMutation,
+} from "@/lib/api";
 import { addCartLine, eventToCartLine, productToCartLine } from "@/lib/commerce";
-import { mockClientEvents, mockOrders, mockProducts } from "@/lib/catalog";
 
 export default function HomePage() {
   const router = useRouter();
   const [wishlist, setWishlist] = useState<string[]>([]);
   const [joined, setJoined] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    setToken(getStoredToken());
+  }, []);
+
+  const {
+    data: products = [],
+    isLoading: productsLoading,
+    isError: productsError,
+  } = useGetProductsQuery();
+  const {
+    data: events = [],
+    isLoading: eventsLoading,
+    isError: eventsError,
+  } = useGetEventsQuery();
+  const { data: orders = [] } = useGetOrdersQuery(undefined, {
+    skip: !token,
+  });
+  const [joinEvent] = useJoinEventMutation();
 
   const topProducts = useMemo(
     () =>
-      [...mockProducts]
+      [...products]
         .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
         .slice(0, 4),
-    [],
+    [products],
   );
 
-  const upcomingEvents = mockClientEvents;
+  const upcomingEvents = events;
   const seatsLeft = upcomingEvents.reduce(
     (sum, event) => sum + Math.max(event.capacity - (event.booked ?? 0), 0),
     0,
   );
+
+  const loading = productsLoading || eventsLoading;
+  const error = productsError || eventsError;
 
   function handleAddProduct(product: ProductItem) {
     addCartLine(productToCartLine(product));
@@ -40,15 +72,45 @@ export default function HomePage() {
     router.push("/cart");
   }
 
-  function handleEventAction(event: EventItem) {
+  async function handleEventAction(event: EventItem) {
     if (event.pricing === "free") {
-      setJoined(event.id);
-      toast({ title: "You're in", description: event.title });
+      if (joining) return;
+      setJoining(true);
+      try {
+        ensureCustomerAuth();
+        setToken(getStoredToken());
+        await joinEvent({ id: event.id }).unwrap();
+        setJoined(event.id);
+        toast({ title: "You're in", description: event.title });
+      } catch (err) {
+        if (err instanceof AuthRequiredError) {
+          toast({ title: "Sign in required", description: err.message });
+          router.push("/login");
+          return;
+        }
+        const message =
+          err instanceof Error ? err.message : "Could not join event";
+        toast({ title: "Join failed", description: message });
+      } finally {
+        setJoining(false);
+      }
       return;
     }
     addCartLine(eventToCartLine(event));
     toast({ title: "Ticket added", description: event.title });
     router.push("/cart");
+  }
+
+  if (loading) {
+    return <p className="m-0 text-sm text-secondary-500">Loading…</p>;
+  }
+
+  if (error) {
+    return (
+      <p className="m-0 text-sm text-secondary-500" role="alert">
+        Could not load marketplace data. Please try again.
+      </p>
+    );
   }
 
   return (
@@ -91,7 +153,7 @@ export default function HomePage() {
         />
         <Stat
           label="Orders"
-          value={String(mockOrders.length)}
+          value={token ? String(orders.length) : "—"}
           detail="Tickets and purchases on this account"
         />
       </StatGrid>

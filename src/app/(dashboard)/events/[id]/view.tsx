@@ -15,21 +15,36 @@ import {
 } from "@events-lab/shared-components";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  AuthRequiredError,
+  ensureCustomerAuth,
+  useGetEventQuery,
+  useJoinEventMutation,
+} from "@/lib/api";
 import { addCartLine, eventToCartLine } from "@/lib/commerce";
-import { getClientEvent } from "@/lib/catalog";
 
 export function EventDetailView({ id }: { id: string }) {
   const router = useRouter();
-  const event = getClientEvent(id);
+  const { data: event, isLoading, isError } = useGetEventQuery(id);
+  const [joinEvent] = useJoinEventMutation();
   const [joined, setJoined] = useState(false);
+  const [joining, setJoining] = useState(false);
 
-  if (!event) {
+  if (isLoading) {
+    return <p className="m-0 text-sm text-secondary-500">Loading…</p>;
+  }
+
+  if (isError || !event) {
     return (
       <div className="page-enter flex flex-col gap-6">
         <PageHeader
           eyebrow="Events"
           title="Event not found"
-          description={`No event matches id “${id}”.`}
+          description={
+            isError
+              ? "Could not load this event. Please try again."
+              : `No event matches id “${id}”.`
+          }
           actions={
             <Button
               type="button"
@@ -47,11 +62,27 @@ export function EventDetailView({ id }: { id: string }) {
   const seats = getEventAvailability(event);
   const isFree = event.pricing === "free";
 
-  function joinOrBuy() {
-    if (!event || seats.soldOut) return;
+  async function joinOrBuy() {
+    if (!event || seats.soldOut || joining) return;
     if (isFree) {
-      setJoined(true);
-      toast({ title: "You're in", description: event.title });
+      setJoining(true);
+      try {
+        ensureCustomerAuth();
+        await joinEvent({ id: event.id }).unwrap();
+        setJoined(true);
+        toast({ title: "You're in", description: event.title });
+      } catch (err) {
+        if (err instanceof AuthRequiredError) {
+          toast({ title: "Sign in required", description: err.message });
+          router.push("/login");
+          return;
+        }
+        const message =
+          err instanceof Error ? err.message : "Could not join event";
+        toast({ title: "Join failed", description: message });
+      } finally {
+        setJoining(false);
+      }
       return;
     }
     addCartLine(eventToCartLine(event));
@@ -76,7 +107,7 @@ export function EventDetailView({ id }: { id: string }) {
             </Button>
             <Button
               type="button"
-              disabled={seats.soldOut || joined}
+              disabled={seats.soldOut || joined || joining}
               onClick={joinOrBuy}
             >
               {seats.soldOut
@@ -128,7 +159,7 @@ export function EventDetailView({ id }: { id: string }) {
             ) : null}
             <Button
               type="button"
-              disabled={seats.soldOut || joined}
+              disabled={seats.soldOut || joined || joining}
               onClick={joinOrBuy}
             >
               {seats.soldOut

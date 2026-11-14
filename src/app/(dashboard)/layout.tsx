@@ -1,5 +1,6 @@
 import { StorefrontShell } from "@events-lab/shared-components";
 import type { ReactNode } from "react";
+import { AuthControls } from "@/components/auth-controls";
 
 // @next-codemod-ignore Cache Components adoption: this segment temporarily allows blocking.
 // Remove this opt-out after verifying the segment passes validation without it.
@@ -14,7 +15,7 @@ const nav = [
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
-    <StorefrontShell product="Events Lab" nav={nav}>
+    <StorefrontShell product="Events Lab" nav={nav} authSlot={<AuthControls />}>
       {children}
     </StorefrontShell>
   );

@@ -7,41 +7,84 @@ import {
   MarketProductCard,
   TextField,
   toast,
+  type CategoryItem,
   type EventItem,
   type ProductItem,
 } from "@events-lab/shared-components";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
-import { addCartLine, eventToCartLine, productToCartLine } from "@/lib/commerce";
 import {
-  marketplaceCategories,
-  marketplaceCategoryFilters,
-  mockClientEvents,
-  mockProducts,
-  type MarketplaceCategory,
-} from "@/lib/catalog";
+  AuthRequiredError,
+  ensureCustomerAuth,
+  toMarketplaceCategories,
+  useGetCategoriesQuery,
+  useGetEventsQuery,
+  useGetProductsQuery,
+  useJoinEventMutation,
+} from "@/lib/api";
+import { images } from "@/lib/catalog";
+import { addCartLine, eventToCartLine, productToCartLine } from "@/lib/commerce";
 
 function MarketplaceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialCategory = (searchParams.get("category") ??
-    "All") as MarketplaceCategory;
+  const initialCategory = searchParams.get("category") ?? "All";
   const initialQuery = searchParams.get("q") ?? "";
 
   const [query, setQuery] = useState(initialQuery);
-  const [category, setCategory] = useState<MarketplaceCategory>(
-    marketplaceCategoryFilters.includes(initialCategory)
-      ? initialCategory
-      : "All",
-  );
+  const [category, setCategory] = useState(initialCategory);
   const [wishlist, setWishlist] = useState<string[]>([]);
   const [joined, setJoined] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
+
+  const {
+    data: eventsData = [],
+    isLoading: eventsLoading,
+    isError: eventsError,
+  } = useGetEventsQuery();
+  const {
+    data: productsData = [],
+    isLoading: productsLoading,
+    isError: productsError,
+  } = useGetProductsQuery();
+  const {
+    data: categoriesData = [],
+    isLoading: categoriesLoading,
+    isError: categoriesError,
+  } = useGetCategoriesQuery();
+  const [joinEvent] = useJoinEventMutation();
+
+  const marketplaceCategories = useMemo(() => {
+    const fromApi = toMarketplaceCategories(categoriesData);
+    const eventsCard: CategoryItem = {
+      id: "events",
+      label: "Events",
+      href: "/marketplace?category=Events",
+      imageUrl: eventsData[0]?.imageUrl ?? images.events,
+      images: eventsData[0]?.imageUrl
+        ? [eventsData[0].imageUrl]
+        : [images.events],
+      ctaLabel: "Book Now",
+    };
+    return [eventsCard, ...fromApi.filter((item) => item.label !== "Events")];
+  }, [categoriesData, eventsData]);
+
+  const categoryFilters = useMemo(() => {
+    const names = new Set<string>(["All", "Events"]);
+    for (const product of productsData) {
+      if (product.category) names.add(product.category);
+    }
+    for (const item of marketplaceCategories) {
+      names.add(item.label);
+    }
+    return Array.from(names);
+  }, [productsData, marketplaceCategories]);
 
   const normalized = query.trim().toLowerCase();
 
   const events = useMemo(() => {
     if (category !== "All" && category !== "Events") return [];
-    return mockClientEvents.filter((event) => {
+    return eventsData.filter((event) => {
       if (!normalized) return true;
       return (
         event.title.toLowerCase().includes(normalized) ||
@@ -49,11 +92,11 @@ function MarketplaceContent() {
         (event.description?.toLowerCase().includes(normalized) ?? false)
       );
     });
-  }, [category, normalized]);
+  }, [category, normalized, eventsData]);
 
   const products = useMemo(() => {
     if (category === "Events") return [];
-    return mockProducts.filter((product) => {
+    return productsData.filter((product) => {
       if (category !== "All" && product.category !== category) return false;
       if (!normalized) return true;
       return (
@@ -63,12 +106,29 @@ function MarketplaceContent() {
         (product.category?.toLowerCase().includes(normalized) ?? false)
       );
     });
-  }, [category, normalized]);
+  }, [category, normalized, productsData]);
 
-  function handleEventAction(event: EventItem) {
+  async function handleEventAction(event: EventItem) {
     if (event.pricing === "free") {
-      setJoined(event.id);
-      toast({ title: "You're in", description: event.title });
+      if (joining) return;
+      setJoining(true);
+      try {
+        ensureCustomerAuth();
+        await joinEvent({ id: event.id }).unwrap();
+        setJoined(event.id);
+        toast({ title: "You're in", description: event.title });
+      } catch (err) {
+        if (err instanceof AuthRequiredError) {
+          toast({ title: "Sign in required", description: err.message });
+          router.push("/login");
+          return;
+        }
+        const message =
+          err instanceof Error ? err.message : "Could not join event";
+        toast({ title: "Join failed", description: message });
+      } finally {
+        setJoining(false);
+      }
       return;
     }
     addCartLine(eventToCartLine(event));
@@ -80,6 +140,18 @@ function MarketplaceContent() {
     addCartLine(productToCartLine(product));
     toast({ title: "Added to cart", description: product.name });
     router.push("/cart");
+  }
+
+  if (eventsLoading || productsLoading || categoriesLoading) {
+    return <p className="m-0 text-sm text-secondary-500">Loading…</p>;
+  }
+
+  if (eventsError || productsError || categoriesError) {
+    return (
+      <p className="m-0 text-sm text-secondary-500" role="alert">
+        Could not load marketplace. Please try again.
+      </p>
+    );
   }
 
   return (
@@ -106,7 +178,7 @@ function MarketplaceContent() {
             onChange={(event) => setQuery(event.target.value)}
           />
           <div className="flex flex-wrap gap-2">
-            {marketplaceCategoryFilters.map((item) => (
+            {categoryFilters.map((item) => (
               <Button
                 key={item}
                 type="button"
@@ -130,10 +202,7 @@ function MarketplaceContent() {
               key={item.id}
               category={item}
               onOpen={(selected) => {
-                const next = selected.label as MarketplaceCategory;
-                setCategory(
-                  marketplaceCategoryFilters.includes(next) ? next : "All",
-                );
+                setCategory(selected.label);
               }}
             />
           ))}
@@ -156,7 +225,7 @@ function MarketplaceContent() {
               role="status"
             >
               You&apos;re in for{" "}
-              {mockClientEvents.find((event) => event.id === joined)?.title}.
+              {eventsData.find((event) => event.id === joined)?.title}.
               Free ticket confirmed.
             </p>
           ) : null}

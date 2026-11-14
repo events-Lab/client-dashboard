@@ -8,23 +8,65 @@ import {
 } from "@events-lab/shared-components";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  AuthRequiredError,
+  ensureCustomerAuth,
+  useGetEventsQuery,
+  useJoinEventMutation,
+} from "@/lib/api";
 import { addCartLine, eventToCartLine } from "@/lib/commerce";
-import { mockClientEvents } from "@/lib/catalog";
 
 export default function EventsPage() {
   const router = useRouter();
   const [joined, setJoined] = useState<string | null>(null);
+  const [joining, setJoining] = useState(false);
 
-  function handleAction(event: EventItem) {
+  const {
+    data: events = [],
+    isLoading,
+    isError,
+  } = useGetEventsQuery();
+  const [joinEvent] = useJoinEventMutation();
+
+  async function handleAction(event: EventItem) {
     if (event.pricing === "free") {
-      setJoined(event.id);
-      toast({ title: "You're in", description: event.title });
+      if (joining) return;
+      setJoining(true);
+      try {
+        ensureCustomerAuth();
+        await joinEvent({ id: event.id }).unwrap();
+        setJoined(event.id);
+        toast({ title: "You're in", description: event.title });
+      } catch (err) {
+        if (err instanceof AuthRequiredError) {
+          toast({ title: "Sign in required", description: err.message });
+          router.push("/login");
+          return;
+        }
+        const message =
+          err instanceof Error ? err.message : "Could not join event";
+        toast({ title: "Join failed", description: message });
+      } finally {
+        setJoining(false);
+      }
       return;
     }
 
     addCartLine(eventToCartLine(event));
     toast({ title: "Ticket added", description: event.title });
     router.push("/cart");
+  }
+
+  if (isLoading) {
+    return <p className="m-0 text-sm text-secondary-500">Loading…</p>;
+  }
+
+  if (isError) {
+    return (
+      <p className="m-0 text-sm text-secondary-500" role="alert">
+        Could not load events. Please try again.
+      </p>
+    );
   }
 
   return (
@@ -40,12 +82,12 @@ export default function EventsPage() {
           role="status"
         >
           You&apos;re in for{" "}
-          {mockClientEvents.find((event) => event.id === joined)?.title}. Ticket
+          {events.find((event) => event.id === joined)?.title}. Ticket
           confirmed — no payment needed.
         </p>
       ) : null}
       <div className="stagger grid grid-cols-3 gap-4 max-[1000px]:grid-cols-2 max-[700px]:grid-cols-1">
-        {mockClientEvents.map((event) => (
+        {events.map((event) => (
           <MarketEventCard
             key={event.id}
             event={event}
